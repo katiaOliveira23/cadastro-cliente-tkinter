@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import ttk
 import sqlite3
 
+# Cria a janela
 root = Tk()
 
 class Funcs():
