@@ -2,8 +2,49 @@ from tkinter import *
 from tkinter import ttk
 import sqlite3
 
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import SimpleDocTemplate, Image
+import webbrowser
+
 # Cria a janela
 root = Tk()
+
+class Relatorios():
+    def print_cliente(self):
+        webbrowser.open("cliente.pdf")
+
+    def gerar_relarorio(self):
+        self.c = canvas.Canvas("cliente.pdf")
+
+        self.codigo_rel = self.codigo_entry.get()
+        self.nome_rel = self.nome_entry.get()
+        self.telefone_rel = self.telefone_entry.get()
+        self.endereco_rel = self.endereco_entry.get()
+
+        self.c.setFont("Helvetica-Bold", 24)
+        self.c.drawString(200, 750, 'Ficha do Cliente')
+
+        self.c.setFont("Helvetica-Bold", 14)
+        self.c.drawString(50, 690, 'Codigo: ')
+        self.c.drawString(50, 670, 'Nome: ')
+        self.c.drawString(50, 650, 'Telefone: ')
+        self.c.drawString(50, 630, 'Endereço: ')
+
+        self.c.setFont("Helvetica", 14)
+        self.c.drawString(150, 690, self.codigo_rel)
+        self.c.drawString(150, 670, self.nome_rel)
+        self.c.drawString(150, 650, self.telefone_rel)
+        self.c.drawString(150, 630, self.endereco_rel)
+
+        self.c.rect(20, 600, 600, 1, fill=True, stroke=False)
+
+        self.c.showPage()
+        self.c.save()
+        self.print_cliente()
+
 
 class Funcs():
     # Limpas os campos da tela
@@ -34,13 +75,16 @@ class Funcs():
         self.cursor.execute(table_create_query); print('Tabelas criadas...')
         self.conn.commit()
         self.deconecta_db()
-    # Adiciona um novo cliente
-    def add_cliente(self):
+
+    def variaveis(self):
         self.codigo = self.codigo_entry.get()
         self.nome = self.nome_entry.get()
         self.telefone = self.telefone_entry.get()
         self.endereco = self.endereco_entry.get()
 
+    # Adiciona um novo cliente
+    def add_cliente(self):
+        self.variaveis()
         self.concta_db()
 
         clientes_insert_query = '''INSERT INTO clientes(nome_cliente, telefone, endereco)
@@ -74,7 +118,64 @@ class Funcs():
 
         self.deconecta_db()
 
-class Application(Funcs):
+    def OnDoubleClick(self, event):
+        self.limpa_tela()
+        self.lista_cli.selection()
+
+        for n in self.lista_cli.selection():
+            col1, col2, col3, col4 = self.lista_cli.item(n, 'values')
+            self.codigo_entry.insert(END, col1)
+            self.nome_entry.insert(END, col2)
+            self.telefone_entry.insert(END, col3)
+            self.endereco_entry.insert(END, col4)
+
+    def deleta_cliente(self):
+        self.variaveis()
+        self.concta_db()
+
+        clientes_delete_query = """DELETE FROM clientes WHERE id = ? """        
+        dados = self.codigo
+
+        self.cursor.execute(clientes_delete_query, dados)
+        self.conn.commit()
+        self.deconecta_db()
+        self.limpa_tela()
+        self.listar_clientes()
+
+    def altera_cliente(self):
+        self.variaveis()
+        self.concta_db()
+
+        clientes_update_query = """UPDATE clientes SET nome_cliente = ?, telefone = ?, endereco = ?
+                    WHERE id = ?"""
+        dados = (self.nome, self.telefone, self.endereco, self.codigo)
+
+        self.cursor.execute(clientes_update_query, dados)
+        self.conn.commit()
+        self.deconecta_db()
+        self.listar_clientes()
+        self.limpa_tela()
+
+    def busca_cliente(self):
+        self.concta_db()
+        self.lista_cli.delete(*self.lista_cli.get_children())
+
+        self.nome_entry.insert(END, '%')
+        nome = self.nome_entry.get()    
+
+        self.cursor.execute("""SELECT id, nome_cliente, telefone, endereco 
+                        FROM clientes
+                        WHERE nome_cliente LIKE '%s' ORDER BY nome_cliente ASC"""% nome)
+        busca_nome_cliente = self.cursor.fetchall()
+
+        for i in busca_nome_cliente:
+            self.lista_cli.insert("", END, values=i)
+
+        self.limpa_tela()            
+        self.deconecta_db()
+        
+
+class Application(Funcs, Relatorios):
     def __init__(self):
         self.root = root
         self.tela()      
@@ -83,10 +184,11 @@ class Application(Funcs):
         self.lista_frame2()
         self.cria_tabelas()
         self.listar_clientes()
+        self.menus()
         root.mainloop()
     
     def tela(self):
-        self.root.title("Despesas")
+        self.root.title("Cadastro de Clientes")
         self.root.configure(bg='#2F4F4F')
         self.root.geometry('700x500')
         self.root.resizable(True, True)
@@ -112,7 +214,7 @@ class Application(Funcs):
         
         # Criar botão buscar
         self.bt_buscar = Button(self.frame_1, text='Buscar', bd=2, bg='#107DB2', fg='white',
-                                 font=('verdana', 8, 'bold'))
+                                 font=('verdana', 8, 'bold'), command=self.busca_cliente)
         self.bt_buscar.place(relx=0.31, rely=0.1, relheight=0.1, relwidth=0.1)
 
         # Criar botão salvar
@@ -121,13 +223,13 @@ class Application(Funcs):
         self.bt_salvar.place(relx=0.61, rely=0.1, relheight=0.1, relwidth=0.1)
 
         # Criar botão editar
-        self.bt_editar= Button(self.frame_1, text='Editar', bd=2, bg='#107DB2', fg='white',
-                                 font=('verdana', 8, 'bold'))
+        self.bt_editar= Button(self.frame_1, text='Alterar', bd=2, bg='#107DB2', fg='white',
+                                 font=('verdana', 8, 'bold'), command=self.altera_cliente)
         self.bt_editar.place(relx=0.72, rely=0.1, relheight=0.1, relwidth=0.1)
 
         # Criar botão excluir
         self.bt_excluir = Button(self.frame_1, text='Apagar', bd=2, bg='#107DB2', fg='white',
-                                 font=('verdana', 8, 'bold'))
+                                 font=('verdana', 8, 'bold'), command=self.deleta_cliente)
         self.bt_excluir.place(relx=0.83, rely=0.1, relheight=0.1, relwidth=0.1)
 
         # Criar a label e entrada do código
@@ -178,6 +280,22 @@ class Application(Funcs):
         self.scrooll_lista = Scrollbar(self.frame_2, orient='vertical')
         self.scrooll_lista.configure(command=self.lista_cli.yview)
         self.scrooll_lista.place(relx=0.96, rely=0.01, relwidth=0.04, relheight=0.85)
+        self.lista_cli.bind("<Double-1>", self.OnDoubleClick)           
+    def menus(self):
+        menubar = Menu(self.root)     
+        self.root.config(menu=menubar)
+        filemenu = Menu(menubar)
+        filemenu2 = Menu(menubar)
+
+        def Quit(): self.root.destroy()
+        menubar.add_cascade(label="Opções", menu=filemenu)
+        menubar.add_cascade(label="Relatórios", menu=filemenu2)
+
+        filemenu.add_command(label="Limpar Cliente", command=self.limpa_tela)
+        filemenu.add_command(label="Sair", command=Quit)
+
+        filemenu2.add_command(label="Ficha do Cliente", command=self.gerar_relarorio)
+        
 
 # Executa a aplicação
 Application()
